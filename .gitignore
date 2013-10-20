@@ -1,6 +1,7 @@
 # Preprocessing files
 *.d
 .dep
+*.hex
 build-uno
 
 # Compiled Object files
