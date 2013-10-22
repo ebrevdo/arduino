@@ -1,3 +1,3 @@
-[submodule "libraries/Arduino_Rest_Server"]
-	path = libraries/Arduino_Rest_Server
-	url = git@github.com:julioterra/Arduino_Rest_Server.git
+[submodule "libraries/rest_server"]
+	path = libraries/rest_server
+	url = git@github.com:ebrevdo/Arduino_Rest_Server.git

@@ -1,174 +1,107 @@
-#include <LiquidCrystal.h>
 #include <Servo.h>
 #include <TimeAlarms.h>
 #include <Time.h>
+#include <config_rest.h>
+#include <rest_server.h>
+#include <SPI.h>
+#include <Ethernet.h>
 
-LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
-const int buttonPin = A0; // analogue pin receiving button presses
+#include "feedservo.h"
+#include "ntp.h"
+
+byte ENET_MAC[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+byte ENET_IP[] = { 192, 168, 2, 2 };
+
 time_t feedDelta = AlarmHMS(12, 0, 0); // 12 hours = 12*60*60 seconds
-int menuResetDelta = 5;
 AlarmId feedAlarm;
 AlarmId menuResetAlarm;
 
-#include "feedservo.h"
-#include "buttons.h"
-#include "menuitem.h"
-#include "menu.h"
+EthernetServer server(80);
+RestServer restServer = RestServer(Serial);
 
 struct DHM {
-  int hours;
-  int mins;
-  int secs;
+    int hours;
+    int mins;
+    int secs;
 };
 
 void timeToDHM(time_t d, DHM &dhm) {
-  dhm.hours = d / SECS_PER_HOUR;
-  d -= dhm.hours * SECS_PER_HOUR;
-  dhm.mins = d / SECS_PER_MIN;
-  d -= dhm.mins * SECS_PER_MIN;
-  dhm.secs = d;
+    dhm.hours = d / SECS_PER_HOUR;
+    d -= dhm.hours * SECS_PER_HOUR;
+    dhm.mins = d / SECS_PER_MIN;
+    d -= dhm.mins * SECS_PER_MIN;
+    dhm.secs = d;
 }
 
 void reset_feed_timer() {
-  Alarm.free(feedAlarm);
-  feedAlarm = Alarm.timerRepeat(feedDelta, FeedServo::feed_trigger);
-  Serial.println("new feed alarm: " + String(feedAlarm));
+    Alarm.free(feedAlarm);
+    feedAlarm = Alarm.timerRepeat(feedDelta, FeedServo::feed_trigger);
+    Serial.println("new feed alarm: " + String(feedAlarm));
 }
 
-class NextFeedMenuItem : public MenuItem {
- public:
-  NextFeedMenuItem() : MenuItem("Next Feed In:") {}
-  virtual String info() {
-    time_t tnow = now();
-    time_t tnext = Alarm.getAlarm(feedAlarm)->nextTrigger;
-    time_t delta = tnext - tnow;
-    DHM d;
-    timeToDHM(delta, d);
-    char buf[16];
-    sprintf(buf, "%02dh %02dm %02ds",
-            d.hours, d.mins, d.secs);
-    return buf;
-  }
-};
-
-class FeedNowMenuItem : public MenuItem {
- public:
-  FeedNowMenuItem() : MenuItem("Feed Now") {}
-  virtual void select() {
-    FeedServo::feed_now();
-  }
-};
-
-class ResetFeedMenuItem : public MenuItem {
- public:
-  ResetFeedMenuItem() : MenuItem("Reset Timer") {}
-  virtual void select() {
-    reset_feed_timer();
-  }
-};
-
-class CancelNextFeedMenuItem : public MenuItem {
- public:
-  CancelNextFeedMenuItem() : MenuItem("Cancel Next Feed") {}
-  virtual void left() {
-    FeedServo::cancelled = ! FeedServo::cancelled;
-  }
-  virtual void right() {
-    FeedServo::cancelled = ! FeedServo::cancelled;
-  }
-  virtual String info() {
-    if (FeedServo::cancelled)
-      return "[Cancelled]";
-    else
-      return "[Not Cancelled]";
-  }
-};
-
-class ChangeFeedDelta : public MenuItem {
- public:
-  ChangeFeedDelta() : MenuItem("Feed Delta") {}
-  virtual void left() {
-    // Can't set the timer for less than 30 min
-    if (feedDelta <= 30*SECS_PER_MIN)
-      return;
-
-    feedDelta -= 30*SECS_PER_MIN;
-    reset_feed_timer();
-  }
-  virtual void right() {
-    // Can't set the timer for more than 1 day
-    if (feedDelta >= 1*SECS_PER_DAY)
-      return;
-
-    feedDelta += 30*SECS_PER_MIN;
-    reset_feed_timer();
-  }
-  virtual String info() {
-    DHM d;
-    timeToDHM(feedDelta, d);
-    char buf[16];
-    sprintf(buf, "%02dh %02dm %02ds",
-            d.hours, d.mins, d.secs);
-    return buf;
-  }
-};
-
-Buttons b;
-MenuItem* mitems[5] = {
-  new NextFeedMenuItem(),
-  new FeedNowMenuItem(),
-  new ResetFeedMenuItem(),
-  new CancelNextFeedMenuItem(),
-  new ChangeFeedDelta()
-};
-
-Menu menu(mitems, 5);
-
-void menu_reset() { menu.set(0); }
 void restart_menu_reset_timer() {
-  Alarm.free(menuResetAlarm);
-  menuResetAlarm = Alarm.timerRepeat(menuResetDelta, menu_reset);
+    Alarm.free(menuResetAlarm);
+    //menuResetAlarm = Alarm.timerRepeat(menuResetDelta, menu_reset);
+}
+
+void setup_ethernet() {
+    Ethernet.begin(ENET_MAC, ENET_IP);
+}
+
+void setup_server() {
+    server.begin();
+
+    resource_description_t resources[4] = {
+        {"feed_now", true, {0, 1}},
+        {"skip_feed", true, {0, 1}},
+        {"servo_neutral", true, {0, 180}},
+        {"feed_in", true, {1, 86400}}
+    };
+    restServer.register_resources(resources, 4);
 }
 
 void setup()
 {
-  Serial.begin(9600);
-  FeedServo::initialize();
-  lcd.begin(16, 2);
-  feedAlarm = Alarm.timerRepeat(feedDelta, FeedServo::feed_trigger);
-  //menuResetAlarm = Alarm.timerRepeat(menuResetDelta, menu_reset);
+    // Serial port
+    Serial.begin(9600);
+    while (!Serial)
+        ;
 
-  menu.showCurrent();
+    // Ethernet
+    Serial.println("Setting up ethernet");
+    setup_ethernet();
+
+    // NTP
+    Serial.println("Setting up NTP");
+    NTP::setup();
+
+    // Feeder servo
+    Serial.println("Setting up FeedServo");
+    FeedServo::setup();
+    //feedAlarm = Alarm.timerRepeat(feedDelta, FeedServo::feed_trigger);
+
+    // REST server
+    setup_server();
+}
+
+void handle_server() {
+    EthernetClient client = server.available();
+    if (client) {
+        while (client.connected()) {
+            if (restServer.handle_requests(client)) {
+                // Handle stuff
+                restServer.respond();
+            }
+
+            if (restServer.handle_response(client))
+                break;
+
+        }
+        delay(1);
+        client.stop();
+    }
 }
 
 void loop() {
-  int buttonRead = analogRead(buttonPin);
-
-  switch (b.type(buttonRead)) {
-    case Buttons::UP:
-      menu.dec();
-      break;
-    case Buttons::DOWN:
-      menu.inc();
-      break;
-    case Buttons::SELECT:
-      menu.callSelect();
-      break;
-    case Buttons::LEFT:
-      menu.callLeft();
-      break;
-    case Buttons::RIGHT:
-      menu.callRight();
-      break;
-    default:
-      break;
-  }
-
-  if (b.type(buttonRead) != Buttons::NONE) {
-    Serial.println("bnum: " + String(buttonRead) + " button type: " + b.toString(b.type(buttonRead)));
-    //restart_menu_reset_timer();
-    Alarm.delay(300);
-  } else {
-    Alarm.delay(0);
-  }
+    handle_server();
 }
