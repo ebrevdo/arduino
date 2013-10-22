@@ -5,6 +5,7 @@
 #include <rest_server.h>
 #include <SPI.h>
 #include <Ethernet.h>
+#include <limits.h>
 
 #include "feedservo.h"
 #include "ntp.h"
@@ -55,7 +56,7 @@ void setup_server() {
         {"feed_now", true, {0, 1}},
         {"skip_feed", true, {0, 1}},
         {"servo_neutral", true, {0, 180}},
-        {"feed_in", true, {1, 86400}}
+        {"feed_tod_sec", true, {INT_MIN, INT_MAX}}
     };
     restServer.register_resources(resources, 4);
 }
@@ -73,7 +74,7 @@ void setup()
 
     // NTP
     Serial.println("Setting up NTP");
-    NTP::setup();
+    NTP::setup(Serial);
 
     // Feeder servo
     Serial.println("Setting up FeedServo");

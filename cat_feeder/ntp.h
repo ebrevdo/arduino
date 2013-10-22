@@ -1,6 +1,7 @@
 #include <Time.h>
 #include <Ethernet.h>
 #include <EthernetUdp.h>
+#include <Stream.h>
 #include <SPI.h>
 
 namespace NTP {
@@ -69,11 +70,18 @@ namespace NTP {
         return 0; // return 0 if unable to get the time
     }
 
-    void setup() {
+    void setup(Print& serial) {
         // Assumes Ethernet has been set up with a MAC address already
         unsigned int localPort = 64234;  // local port to listen for UDP packets
         ntpUDP.begin(localPort);
         setSyncProvider(getNtpTime);
-    }
 
+        // Wait until time has been set
+        serial.println("Waiting until NTP has synced");
+        while (timeStatus() != timeSet) {
+            serial.print(".");
+            delay(1);
+        }
+        serial.println("Time set!");
+    }
 };
