@@ -3,6 +3,7 @@
 #include <EthernetUdp.h>
 #include <Stream.h>
 #include <SPI.h>
+#include <stdarg.h>
 
 namespace NTP {
 
@@ -70,6 +71,15 @@ namespace NTP {
         return 0; // return 0 if unable to get the time
     }
 
+    void p(Print& to, const char *fmt, ... ){
+        char tmp[64]; // resulting string limited to 64 chars
+        va_list args;
+        va_start (args, fmt );
+        vsnprintf(tmp, 64, fmt, args);
+        va_end (args);
+        to.print(tmp);
+    }
+
     void setup(Print& serial) {
         // Assumes Ethernet has been set up with a MAC address already
         unsigned int localPort = 64234;  // local port to listen for UDP packets
@@ -80,8 +90,13 @@ namespace NTP {
         serial.println("Waiting until NTP has synced");
         while (timeStatus() != timeSet) {
             serial.print(".");
+            now();
             delay(1);
         }
-        serial.println("Time set!");
+        time_t t_now = now();
+        tmElements_t te;
+        breakTime(t_now, te);
+        p(serial, "\nTime set: %04d-%02d-%02d %02d:%02d:%02d\n",
+            te.Year, te.Month, te.Day, te.Hour, te.Minute, te.Second);
     }
 };
