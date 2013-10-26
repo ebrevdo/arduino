@@ -352,7 +352,7 @@ AlarmID_t TimeAlarmsClass::alarmRepeat(time_t value, OnTick_t onTickHandler){ //
     	    Alarm[id].Mode.isOneShot = isOneShot;
     	    Alarm[id].Mode.alarmType = alarmType;
     	    Alarm[id].value = value;
-    	    isEnabled ?  enable(id) : disable(id);   
+    	    isEnabled ?  enable(id) : disable(id);
             return id;  // alarm created ok
     	  }  
         }

@@ -84,19 +84,19 @@ namespace NTP {
         // Assumes Ethernet has been set up with a MAC address already
         unsigned int localPort = 64234;  // local port to listen for UDP packets
         ntpUDP.begin(localPort);
-        setSyncProvider(getNtpTime);
 
         // Wait until time has been set
-        serial.println("Waiting until NTP has synced");
+        serial.println(F("Waiting until NTP has synced"));
         while (timeStatus() != timeSet) {
+            setSyncProvider(getNtpTime);
+            delay(1000);
             serial.print(".");
-            now();
-            delay(1);
         }
         time_t t_now = now();
         tmElements_t te;
         breakTime(t_now, te);
-        p(serial, "\nTime set: %04d-%02d-%02d %02d:%02d:%02d\n",
-            te.Year, te.Month, te.Day, te.Hour, te.Minute, te.Second);
+        p(serial, "Time set: %04d-%02d-%02d %02d:%02d:%02d",
+            1970 + te.Year, te.Month, te.Day, te.Hour, te.Minute, te.Second);
+        serial.println("");
     }
 };

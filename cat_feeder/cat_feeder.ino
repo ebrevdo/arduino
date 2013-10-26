@@ -24,10 +24,13 @@ EthernetServer server(80);
 RestServer restServer = RestServer(Serial);
 
 void set_feed_timer() {
-    for (int i = 0; i < NUM_FEEDS; i++) {
+    for (int i = 0; i < NUM_FEEDS; i++)
         Alarm.free(feedAlarm[i]);
-        Serial.println("New feed alarm: " + String(feedAlarm[i]));
-        feedAlarm[i] = Alarm.alarmRepeat(feedTime + i*feedDelta, FeedServo::feed_trigger);
+
+    for (int i = 0; i < NUM_FEEDS; i++) {
+        feedAlarm[i] = Alarm.alarmRepeat((time_t)(feedTime + i*feedDelta), FeedServo::feed_trigger);
+        Serial.print("New feed alarm: " + String(i) + " / ");
+        Serial.println((int)feedAlarm[i]);
     }
 }
 
@@ -40,7 +43,7 @@ struct ResourceInteraction {
 struct FeedNowInteraction : ResourceInteraction {
     //FeedNowInteraction() { desc = (resource_description_t){"feed_now", true, {0, 1}}; }
     virtual int read() { return 0; }
-    virtual void write(int v) { FeedServo::feed_now(); }
+    virtual void write(int v) { if (v) { FeedServo::feed_now(); } }
 };
 
 struct ServoNeutralInteraction : ResourceInteraction {
@@ -55,9 +58,9 @@ struct ServoNeutralInteraction : ResourceInteraction {
 struct FeedAMMinInteraction : ResourceInteraction {
     // 12AM-12PM = 720 minutes
     //FeedAMMinInteraction() { desc = (resource_description_t){"feed_am_min", true, {0, 720-1}}; }
-    virtual int read() { return feedTime; }
+    virtual int read() { return (int)(feedTime / 60); }
     virtual void write(int v) {
-        feedTime = v;
+        feedTime = (time_t)(v*60);
         set_feed_timer();
     }
 };
@@ -73,13 +76,19 @@ ResourceInteraction *resource_interactions[RESOURCE_COUNT] = {
 void setup_server() {
     server.begin();
 
+    Serial.println("Started server");
+
     resource_description_t resources[RESOURCE_COUNT] = {
         {"feed_now", true, {0, 1}},
         {"servo_neutral", true, {0, 180}},
         {"feed_am_min", true, {0, 720-1}} // 12AM-12PM = 720 minutes
     };
     restServer.register_resources(resources, RESOURCE_COUNT);
-    restServer.set_post_with_get(true);
+    // restServer.set_post_with_get(true);
+
+    Serial.print(F("Registered resources with server: "));
+    Serial.print(String(restServer.get_server_state()));
+    Serial.println("!");
 }
 
 void setup_alarm() {
@@ -87,7 +96,13 @@ void setup_alarm() {
 }
 
 void setup_ethernet() {
+    // Sprinkle some magic pixie dust. (disable SD SPI to fix bugs)
+    pinMode(4, OUTPUT);
+    digitalWrite(4, HIGH);
+
     Ethernet.begin(ENET_MAC, ENET_IP);
+    // Disable w5100 SPI
+    digitalWrite(10, HIGH);
 }
 
 void setup()
@@ -98,34 +113,31 @@ void setup()
         ;
 
     // Ethernet
-    Serial.println("Setting up ethernet");
+    Serial.println(F("Setting up ethernet"));
     setup_ethernet();
 
     // NTP
-    Serial.println("Setting up NTP");
+    Serial.println(F("Setting up NTP"));
     NTP::setup(Serial);
-
-    // Feeder servo
-    Serial.println("Setting up FeedServo");
-    FeedServo::setup();
-    //feedAlarm = Alarm.timerRepeat(feedDelta, FeedServo::feed_trigger);
-
-    // Setup the alarm
-    setup_alarm();
 
     // REST server
     setup_server();
+
+    // Feeder servo
+    Serial.println(F("Setting up FeedServo"));
+    FeedServo::setup();
+
+    // Setup the alarm
+    setup_alarm();
 }
 
 void handle_resources(RestServer &serv) {
     for (int i = 0; i < RESOURCE_COUNT; i++) {
-        if (serv.resource_requested(i)) {
-            Serial.println("Resource requested: " + String(i));
-            serv.resource_set_state(i, resource_interactions[i]->read());
-        }
         if (serv.resource_updated(i)) {
-            Serial.println("Resource written: " + String(i));
             resource_interactions[i]->write(serv.resource_get_state(i));
+        }
+        if (serv.resource_requested(i)) {
+            serv.resource_set_state(i, resource_interactions[i]->read());
         }
     }
 }
@@ -143,11 +155,12 @@ void handle_server() {
                 break;
 
         }
-        delay(1);
+        Alarm.delay(1);
         client.stop();
     }
 }
 
 void loop() {
     handle_server();
+    Alarm.delay(0); // Service any alarms
 }
