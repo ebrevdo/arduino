@@ -4,7 +4,7 @@
 
 namespace FeedServo {
     Servo servo = Servo();
-    int servoNeutral = 89; // 90 == servo is neutral (not rotating)
+    int servoNeutral = 85; // 90 == servo is neutral (not rotating)
     const int pin = 7; // digital pin controlling the servo
     const int servoForward = 70; // 0 == fastest reverse
     const int servoReverse = 115; // 180 == fastest forward

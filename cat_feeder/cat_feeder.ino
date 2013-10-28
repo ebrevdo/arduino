@@ -46,8 +46,10 @@ struct FeedNow : Resource { virtual void write(int v) { if (v) { FeedServo::feed
 struct ServoNeutral : Resource {
     virtual int read() { return FeedServo::servoNeutral; }
     virtual void write(int v) {
-        FeedServo::servoNeutral = v;
-        FeedServo::neutral();
+        if (abs(v - FeedServo::servoNeutral) < 20) {
+            FeedServo::servoNeutral = v;
+            FeedServo::neutral();
+        }
     }
 };
 
