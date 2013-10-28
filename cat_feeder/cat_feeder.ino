@@ -1,6 +1,7 @@
 #include <Servo.h>
 #include <TimeAlarms.h>
 #include <Time.h>
+//#include <eeprom_dict.h>
 #include <config_rest.h>
 #include <rest_server.h>
 #include <SPI.h>
@@ -9,10 +10,10 @@
 
 #include "feedservo.h"
 #include "ntp.h"
+#include "soft_reset.h"
 
 byte ENET_MAC[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 byte ENET_IP[] = { 192, 168, 2, 2 };
-
 
 #define FEED_INTERVAL_HOURS 12
 #define NUM_FEEDS 2
@@ -34,20 +35,15 @@ void set_feed_timer() {
     }
 }
 
-struct ResourceInteraction {
-    virtual int read() = 0;
-    virtual void write(int v) = 0;
+struct Resource {
+    virtual int read() { return 0; };
+    virtual void write(int v) {};
     //resource_description_t desc;
 };
 
-struct FeedNowInteraction : ResourceInteraction {
-    //FeedNowInteraction() { desc = (resource_description_t){"feed_now", true, {0, 1}}; }
-    virtual int read() { return 0; }
-    virtual void write(int v) { if (v) { FeedServo::feed_now(); } }
-};
+struct FeedNow : Resource { virtual void write(int v) { if (v) { FeedServo::feed_now(); } } };
 
-struct ServoNeutralInteraction : ResourceInteraction {
-    //ServoNeutralInteraction() { desc = (resource_description_t){"servo_neutral", true, {0, 180}}; }
+struct ServoNeutral : Resource {
     virtual int read() { return FeedServo::servoNeutral; }
     virtual void write(int v) {
         FeedServo::servoNeutral = v;
@@ -55,33 +51,64 @@ struct ServoNeutralInteraction : ResourceInteraction {
     }
 };
 
-struct FeedAMMinInteraction : ResourceInteraction {
-    // 12AM-12PM = 720 minutes
-    //FeedAMMinInteraction() { desc = (resource_description_t){"feed_am_min", true, {0, 720-1}}; }
-    virtual int read() { return (int)(feedTime / 60); }
+struct FeedHour : Resource {
+    virtual int read() {
+        int h = numberOfHours(feedTime);
+        return (h == 0) ? 12 : h;
+    }
     virtual void write(int v) {
-        feedTime = (time_t)(v*60);
+        int m = numberOfMinutes(feedTime);
+        int h = (v == 12) ? 0 : v;
+        feedTime = AlarmHMS(h, m, 0);
         set_feed_timer();
     }
 };
 
-#define RESOURCE_COUNT 3
+struct FeedMinute : Resource {
+    virtual int read() {
+        return numberOfMinutes(feedTime);
+    }
+    virtual void write(int v) {
+        int h = numberOfHours(feedTime);
+        feedTime = AlarmHMS(h, v, 0);
+        set_feed_timer();
+    }
+};
 
-ResourceInteraction *resource_interactions[RESOURCE_COUNT] = {
-    new FeedNowInteraction(),
-    new ServoNeutralInteraction(),
-    new FeedAMMinInteraction()
+struct SoftReset : Resource { virtual void write(int v) { if (v) soft_reset(); } };
+
+struct TimeHour : Resource { virtual int read() { return hour(); } };
+struct TimeMinute: Resource { virtual int read() { return minute(); } };
+struct TimeSecond : Resource { virtual int read() { return second(); } };
+
+
+#define RESOURCE_COUNT 8
+
+Resource *resource_interactions[RESOURCE_COUNT] = {
+    new FeedNow(),
+    new ServoNeutral(),
+    new FeedHour(),
+    new FeedMinute(),
+    new SoftReset(),
+    new TimeHour(),
+    new TimeMinute(),
+    new TimeSecond()
 };
 
 void setup_server() {
     server.begin();
 
-    Serial.println("Started server");
+    Serial.println(F("Started server"));
 
     resource_description_t resources[RESOURCE_COUNT] = {
         {"feed_now", true, {0, 1}},
         {"servo_neutral", true, {0, 180}},
-        {"feed_am_min", true, {0, 720-1}} // 12AM-12PM = 720 minutes
+        {"feed_hour", true, {1, 12}}, // 1am/pm, 2am/pm, ..., 12am/pm
+        {"feed_minute", true, {0, 59}}, // minutes
+        {"soft_reset", true, {0, 1}},
+        {"t_hour", false, {0, 24}},
+        {"t_min", false, {0, 60}},
+        {"t_sec", false, {0, 60}}
     };
     restServer.register_resources(resources, RESOURCE_COUNT);
     // restServer.set_post_with_get(true);
@@ -107,6 +134,9 @@ void setup_ethernet() {
 
 void setup()
 {
+    // Soft reset
+    setup_soft_reset();
+
     // Serial port
     Serial.begin(9600);
     while (!Serial)
@@ -129,16 +159,16 @@ void setup()
 
     // Setup the alarm
     setup_alarm();
+
+    // test_eeprom()
 }
 
 void handle_resources(RestServer &serv) {
     for (int i = 0; i < RESOURCE_COUNT; i++) {
-        if (serv.resource_updated(i)) {
+        if (serv.resource_updated(i))
             resource_interactions[i]->write(serv.resource_get_state(i));
-        }
-        if (serv.resource_requested(i)) {
+        if (serv.resource_requested(i))
             serv.resource_set_state(i, resource_interactions[i]->read());
-        }
     }
 }
 
@@ -150,10 +180,8 @@ void handle_server() {
                 handle_resources(restServer);
                 restServer.respond();
             }
-
             if (restServer.handle_response(client))
                 break;
-
         }
         Alarm.delay(1);
         client.stop();

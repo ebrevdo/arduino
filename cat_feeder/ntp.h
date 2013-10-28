@@ -15,8 +15,8 @@ namespace NTP {
     //const int timeZone = 1;     // Central European Time
     //const int timeZone = -5;  // Eastern Standard Time (USA)
     //const int timeZone = -4;  // Eastern Daylight Time (USA)
-    const int timeZone = -8;  // Pacific Standard Time (USA)
-    //const int timeZone = -7;  // Pacific Daylight Time (USA)
+    //const int timeZone = -8;  // Pacific Standard Time (USA)
+    const int timeZone = -7;  // Pacific Daylight Time (USA)
 
     EthernetUDP ntpUDP;
 

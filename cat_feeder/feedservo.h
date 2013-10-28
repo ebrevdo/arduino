@@ -26,15 +26,11 @@ namespace FeedServo {
 
         feedingNow = true;
 
-        Serial.println("Feeding now");
+        Serial.println(F("Feeding now"));
         for (int i = 0; i < servoRepeats; i++) {
             Alarm.timerOnce(i*waitLapse + 1, forward);
             Alarm.timerOnce(i*waitLapse + 1 + waitServoReverse, reverse);
-            Serial.println("servo forward in: " + String(i*waitLapse + 1));
-            Serial.println("servo reverse in: " + String(i*waitLapse + 1 + waitServoReverse));
         }
-
-        Serial.println("servo stop in: " + String(servoRepeats*waitLapse + 1));
         Alarm.timerOnce(servoRepeats*waitLapse + 1, neutral);
         Alarm.timerOnce(servoRepeats*waitLapse + 1, feeding_stopped);
     }
