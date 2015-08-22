@@ -30,7 +30,9 @@ void set_feed_timer() {
 
     for (int i = 0; i < NUM_FEEDS; i++) {
         feedAlarm[i] = Alarm.alarmRepeat((time_t)(feedTime + i*feedDelta), FeedServo::feed_trigger);
-        Serial.print("New feed alarm: " + String(i) + " / ");
+        Serial.print(F("New feed alarm: "));
+        Serial.print(String(i));
+        Serial.print(F(" / "));
         Serial.println((int)feedAlarm[i]);
     }
 }
@@ -115,9 +117,8 @@ void setup_server() {
     restServer.register_resources(resources, RESOURCE_COUNT);
     // restServer.set_post_with_get(true);
 
-    Serial.print(F("Registered resources with server: "));
+    Serial.print(F("Registered with server: "));
     Serial.print(String(restServer.get_server_state()));
-    Serial.println("!");
 }
 
 void setup_alarm() {

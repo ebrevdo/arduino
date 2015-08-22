@@ -55,7 +55,7 @@ namespace NTP {
         Serial.println("Transmit NTP Request");
         sendNTPpacket(timeServer);
         uint32_t beginWait = millis();
-        while (millis() - beginWait < 1500) {
+        while (millis() - beginWait < 3000) {
             int size = ntpUDP.parsePacket();
             if (size >= NTP_PACKET_SIZE) {
                 ntpUDP.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer

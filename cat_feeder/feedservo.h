@@ -8,9 +8,9 @@ namespace FeedServo {
     const int pin = 7; // digital pin controlling the servo
     const int servoForward = 70; // 0 == fastest reverse
     const int servoReverse = 115; // 180 == fastest forward
-    const int waitServoReverse = 5; // Time until servo goes backward
-    const int waitLapse = 7; // Time until servo stops (should be > waitServoReverse)
-    const int servoRepeats = 2; // How many times the servo will repeat its forward-backward motion
+    const int waitServoReverse = 2; // Time until servo goes backward
+    const int waitLapse = 5; // Time until servo stops (should be > waitServoReverse)
+    const int servoRepeats = 4; // How many times the servo will repeat its forward-backward motion
 
     boolean feedingNow = false; // Servo control during feeding
     boolean cancelled = false; // Is the next feed cancelled?
@@ -18,7 +18,10 @@ namespace FeedServo {
     void neutral() { servo.write(servoNeutral); }
     void forward() { servo.write(servoForward); }
     void reverse() { servo.write(servoReverse); }
-    void feeding_stopped() { feedingNow = false; }
+    void feeding_stopped() {
+        Serial.println(F("Feeding stopped."));
+        feedingNow = false;
+    }
 
     void feed_now() {
         if (feedingNow)
